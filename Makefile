@@ -7,8 +7,8 @@ define remove
 endef
 
 # Starting learning algorithm
-learn:
-	$(PYTHON) process.py $(DATA_FILE) | tee $(OUT_FILE)
+bag:
+	$(PYTHON) process.py $(DATA_FILE) 2>/dev/null | tee $(OUT_FILE)
 
 # Removing all temporary files
 clean:

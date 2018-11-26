@@ -10,19 +10,20 @@ def create_individual(bagprops, items):
     creator.create("Bag", base.Fitness, weights=(-1.0, -1.0, 1.0))
 
     # The Individual is a vector or booleans with refs to bag and items
-    creator.create("Individual", list, fitness=creator.Bag, items=items)
+    creator.create("Individual", list, fitness=creator.Bag,
+                   items=items)
 
 def register_functions(toolbox, n):
     # Creating a generator of Individuals
     # See: pydoc3 deap.base.Toolbox.register
+    # Random generation of individuals
     toolbox.register("take_item", random_bool)
-    toolbox.register("individual", tools.initRepeat, creator.Individual,
+    toolbox.register("individual", tools.initRepeat,
+                     creator.Individual,
                      toolbox.take_item, n=n)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    toolbox.register("population", tools.initRepeat,
+                     list, toolbox.individual)
 
-    toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
-    toolbox.register("select", tools.selTournament, tournsize=3)
     return toolbox
 
 def evaluate(individual, items, max_weight, max_capacity):
@@ -36,10 +37,12 @@ def evaluate(individual, items, max_weight, max_capacity):
 
     weight = max_weight - weight
     if weight < 0:
-        weight = max_weight + abs(weight)
+        weight = max_weight
+
     capacity = max_capacity - capacity
     if capacity < 0:
-        capacity = max_capacity + abs(capacity)
+        capacity = max_capacity
+
     return weight, capacity, cost
 
 def create_toolbox(bagprops, items):
@@ -52,12 +55,18 @@ def run(bagprops, items):
     # Useful vars
     MAX_WEIGHT = bagprops['maxweight']
     MAX_CAPACITY = bagprops['maxcapacity']
-    POPULATIONS = 100
+    POPULATIONS = 200
 
     toolbox = create_toolbox(bagprops, items)
+
     # Important self-made function for evaluating a population quality
     toolbox.register("evaluate", evaluate, items=items,
                      max_weight=MAX_WEIGHT, max_capacity=MAX_CAPACITY)
+    # Taken algorithms that make default learning fine
+    toolbox.register("mate", tools.cxTwoPoint)
+    toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+    toolbox.register("select", tools.selTournament, tournsize=3)
+
     return get_alive_populations(toolbox, POPULATIONS)
 
 def get_alive_populations(toolbox, populations):
@@ -102,10 +111,58 @@ def run2(bagprops, items):
     # Useful vars
     MAX_WEIGHT = bagprops['maxweight']
     MAX_CAPACITY = bagprops['maxcapacity']
-    POPULATIONS = 100
+    POPULATIONS = 200
+    k = int(len(items) * 0.2)
 
     toolbox = create_toolbox(bagprops, items)
     # Important self-made function for evaluating a population quality
     toolbox.register("evaluate", evaluate, items=items,
                      max_weight=MAX_WEIGHT, max_capacity=MAX_CAPACITY)
-    return get_alive_populations(toolbox, POPULATIONS)
+
+    # Custom chosen algorithms
+    toolbox.register("mate", tools.cxTwoPoint)
+    toolbox.register("mutate", tools.mutFlipBit, indpb=1)
+    toolbox.register("select", tools.selBest)
+
+    return get_custom_populations(toolbox, POPULATIONS)
+
+def get_custom_populations(toolbox, populations):
+    pop = toolbox.population(n=populations)
+
+    CXPB, MUTPB, NGEN = 0.5, 0.2, 200
+
+    # Evaluate the entire population
+    fitnesses = list(map(toolbox.evaluate, pop))
+    for ind, fit in zip(pop, fitnesses):
+        ind.fitness.values = fit
+
+    for g in range(NGEN):
+        # Select the next generation individuals
+        selected = toolbox.select(pop, int(len(pop)*0.2))
+        # Clone the selected individuals
+        offspring = list(map(toolbox.clone, selected))
+
+        # Apply crossover and mutation on the offspring
+        for child1, child2 in zip(offspring[::2], offspring[1::2]):
+                toolbox.mate(child1, child2)
+                del child1.fitness.values
+                del child2.fitness.values
+
+        for mutant in offspring:
+                toolbox.mutate(mutant)
+                del mutant.fitness.values
+
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        fitnesses = list(map(toolbox.evaluate, invalid_ind))
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
+
+        # Removing parents (selected)
+        for indie in selected:
+            pop.remove(indie)
+        # Replacing them with children
+        pop.extend(offspring)
+        g += 1
+
+    return pop
