@@ -15,5 +15,6 @@ clean:
 	@$(call remove, '__pycache__')
 	@$(call remove, '*.pyc')
 	@$(call remove, '#*')
+	@$(call remove, '*~')
 	@$(call remove, '.#*')
 	@$(call remove, '$(OUT_FILE)')
