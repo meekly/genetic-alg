@@ -1,4 +1,7 @@
 import genetic
+import json
+import re
+
 from sys import argv
 
 def parsedata(filename):
@@ -26,19 +29,47 @@ def parsedata(filename):
 def main():
     filename = argv[1]
     bagprops, items = parsedata(filename)
+    result1 = task1(bagprops, items)
+    result2 = task2(bagprops, items)
+    print(json.dumps({
+        1: result1,
+        2: result2,
+    }, sort_keys=True, indent=4))
+
+def task1(bagprops, items):
     n = len(items)
     population = genetic.run(bagprops, items)
-    max = 0
-    ind = population[0]
-    for individ in population:
-        if bagprops['maxweight'] > individ.fitness.values[0] and \
-           bagprops['maxcapacity'] > individ.fitness.values[1] and \
-           max < individ.fitness.values[2]:
-            ind = individ
-            max = individ.fitness.values[2]
-    print(ind)
-    print(ind.fitness)
 
+
+    # Taking the best
+    best = population[0]
+    max = 0
+    for individ in population:
+        (weight, capacity, cost) = individ.fitness.values
+        if bagprops['maxweight'] >= weight and \
+           bagprops['maxcapacity'] >= capacity and \
+           max < cost:
+            best = individ
+            max = cost
+
+    # Parsing indices
+    indices = []
+    for index, i in enumerate(best):
+        if i:
+            indices.append(index+1)
+
+    result = {
+        'items': indices,
+        'weight': bagprops['maxweight'] - best.fitness.values[0],
+        'volume': bagprops['maxcapacity'] - best.fitness.values[1],
+        'value': best.fitness.values[2],
+    }
+
+    return result
+
+
+def task2(bagprops, items):
+    return 'Nothing yet'
 
 if __name__ == '__main__':
     main()

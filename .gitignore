@@ -1,0 +1,6 @@
+__pycache__/
+# Don't want to store an answer
+*.json
+
+\#*
+.\#*

@@ -36,10 +36,10 @@ def evaluate(individual, items, max_weight, max_capacity):
 
     weight = max_weight - weight
     if weight < 0:
-        weight = max_weight
+        weight = max_weight + abs(weight)
     capacity = max_capacity - capacity
     if capacity < 0:
-        capacity = max_capacity
+        capacity = max_capacity + abs(capacity)
     return weight, capacity, cost
 
 def create_toolbox(bagprops, items):
@@ -52,7 +52,7 @@ def run(bagprops, items):
     # Useful vars
     MAX_WEIGHT = bagprops['maxweight']
     MAX_CAPACITY = bagprops['maxcapacity']
-    POPULATIONS = 500
+    POPULATIONS = 100
 
     toolbox = create_toolbox(bagprops, items)
     # Important self-made function for evaluating a population quality
@@ -62,7 +62,7 @@ def run(bagprops, items):
 
 def get_alive_populations(toolbox, populations):
     pop = toolbox.population(n=populations)
-    CXPB, MUTPB, NGEN = 0.5, 0.2, 500
+    CXPB, MUTPB, NGEN = 0.5, 0.2, 200
 
     # Evaluate the entire population
     fitnesses = list(map(toolbox.evaluate, pop))
@@ -95,6 +95,17 @@ def get_alive_populations(toolbox, populations):
 
         # The population is entirely replaced by the offspring
         pop[:] = offspring
-        # TODO selBest reand and implement
 
     return pop
+
+def run2(bagprops, items):
+    # Useful vars
+    MAX_WEIGHT = bagprops['maxweight']
+    MAX_CAPACITY = bagprops['maxcapacity']
+    POPULATIONS = 100
+
+    toolbox = create_toolbox(bagprops, items)
+    # Important self-made function for evaluating a population quality
+    toolbox.register("evaluate", evaluate, items=items,
+                     max_weight=MAX_WEIGHT, max_capacity=MAX_CAPACITY)
+    return get_alive_populations(toolbox, POPULATIONS)
