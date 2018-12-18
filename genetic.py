@@ -1,168 +1,111 @@
-from deap import base, creator, tools
-import random
-from random import choice
+from pyeasyga import pyeasyga
+from random import randint
 
-def random_bool():
-    return choice([False, True])
+_POPULATION_SIZE = 200
+_GENERATIONS = 5
+_CROSS  = 0.2
+_MUTATE = 0.05
+_CONVERGENCE = 0.1
 
-def create_individual(bagprops, items):
-    # The Bag class, containing maximums
-    creator.create("Bag", base.Fitness, weights=(-1.0, -1.0, 1.0))
+class Genetic:
+    def __init__(self, bag, data):
+        self.maxWeight = bag['maxweight']
+        self.maxCapacity = bag['maxcapacity']
+        self.data = data
+        self.best_fitness = False
 
-    # The Individual is a vector or booleans with refs to bag and items
-    creator.create("Individual", list, fitness=creator.Bag,
-                   items=items)
+    def fitness(self, individ, data=[]):
 
-def register_functions(toolbox, n):
-    # Creating a generator of Individuals
-    # See: pydoc3 deap.base.Toolbox.register
-    # Random generation of individuals
-    toolbox.register("take_item", random_bool)
-    toolbox.register("individual", tools.initRepeat,
-                     creator.Individual,
-                     toolbox.take_item, n=n)
-    toolbox.register("population", tools.initRepeat,
-                     list, toolbox.individual)
+        fitness = weight = volume = 0
+        for i, elem in enumerate(individ):
+            weight += self.data[i]['weight'] * elem
+            volume += self.data[i]['capacity'] * elem
+            fitness += self.data[i]['cost'] * elem
 
-    return toolbox
+        if weight > self.maxWeight or volume > self.maxCapacity:
+            fitness = 0
+        return fitness
 
-def evaluate(individual, items, max_weight, max_capacity):
-    "The function that evaluates the quality of individual"
-    weight = capacity = cost = 0
-    for i, item in enumerate(individual):
-        if item:
-            weight += items[i]['weight']
-            capacity += items[i]['capacity']
-            cost += items[i]['cost']
+    def solve(self, generations, population_size):
 
-    weight = max_weight - weight
-    if weight < 0:
-        weight = max_weight
+        raise NotImplementedError
 
-    capacity = max_capacity - capacity
-    if capacity < 0:
-        capacity = max_capacity
+class Genetic1(Genetic):
+    def solve(self, generations = _GENERATIONS, population_size = _POPULATION_SIZE):
+        """
+        Solve backpack problem with pyeasyga genetic library
+        https://github.com/remiomosowon/pyeasyga
+        """
+        ga = pyeasyga.GeneticAlgorithm(
+            self.data,
+            population_size = population_size,
+            generations = generations,
+            maximise_fitness = True)
+        ga.fitness_function = self.fitness
+        ga.run()
+        return ga.best_individual()[1]
 
-    return weight, capacity, cost
+class Genetic2(Genetic):
+    def solve(self,
+        generations = _GENERATIONS,
+        population_size = _POPULATION_SIZE,
+        cross = _CROSS,
+        convergence = _CONVERGENCE):
 
-def create_toolbox(bagprops, items):
-    create_individual(bagprops, items)
-    toolbox = base.Toolbox()
-    register_functions(toolbox, len(items))
-    return toolbox
+        p = self._population(len(self.data), population_size)
+        for generation in range(generations):
+            p = self._evolve(population=p, cross=cross)
+            if self._isconvergence(p[0], convergence):
+                break
+            self.best_fitness = self.fitness(p[0])
+        return p[0]
 
-def run(bagprops, items):
-    # Useful vars
-    MAX_WEIGHT = bagprops['maxweight']
-    MAX_CAPACITY = bagprops['maxcapacity']
-    POPULATIONS = 200
+    def _evolve(self, population, cross):
 
-    toolbox = create_toolbox(bagprops, items)
+        # compute fitness function for each individ
+        graded = [ (self.fitness(individ), individ) for individ in population]
+        # sort individ by fitness function result
+        graded = [ individ[1] for individ in sorted(graded, reverse=True)]
+        # crossing best % of individuals
+        new_generation = self._cross(graded[:int(len(population)*cross)])
+        # adding best % of individuals from prev population
+        new_generation =  graded[:(len(population)-len(new_generation))] + new_generation
+        # mutate some of individuals
+        new_generation = self._mutate(new_generation)
+        return new_generation
 
-    # Important self-made function for evaluating a population quality
-    toolbox.register("evaluate", evaluate, items=items,
-                     max_weight=MAX_WEIGHT, max_capacity=MAX_CAPACITY)
-    # Taken algorithms that make default learning fine
-    toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
-    toolbox.register("select", tools.selTournament, tournsize=3)
+    def _individual(self, length):
 
-    return get_alive_populations(toolbox, POPULATIONS)
+        return [ randint(0, 1) for i in range(length) ]
 
-def get_alive_populations(toolbox, populations):
-    pop = toolbox.population(n=populations)
-    CXPB, MUTPB, NGEN = 0.5, 0.2, 200
+    def _population(self, length, size):
 
-    # Evaluate the entire population
-    fitnesses = list(map(toolbox.evaluate, pop))
-    for ind, fit in zip(pop, fitnesses):
-        ind.fitness.values = fit
+        return [ self._individual(length) for i in range(size) ]
 
-    for g in range(NGEN):
-        # Select the next generation individuals
-        offspring = toolbox.select(pop, len(pop))
-        # Clone the selected individuals
-        offspring = list(map(toolbox.clone, offspring))
+    def _cross(self, p):
 
-        # Apply crossover and mutation on the offspring
-        for child1, child2 in zip(offspring[::2], offspring[1::2]):
-            if random.random() < CXPB:
-                toolbox.mate(child1, child2)
-                del child1.fitness.values
-                del child2.fitness.values
+        for i in range(0, len(p), 2):
+            # find random points for crossover
+            points = []
+            while len(points) < 3:
+                point = randint(0, len(p[0])-1)
+                if point not in points:
+                    points.append(point)
+            # crossing
+            tmp1, tmp2 = p[i][:points[0]], p[i][points[1]:points[2]]
+            p[i][:points[0]], p[i][points[1]:points[2]] = p[i+1][:points[0]], p[i+1][points[1]:points[2]]
+            p[i+1][:points[0]], p[i+1][points[1]:points[2]] = tmp1, tmp2
 
-        for mutant in offspring:
-            if random.random() < MUTPB:
-                toolbox.mutate(mutant)
-                del mutant.fitness.values
+        return p
 
-        # Evaluate the individuals with an invalid fitness
-        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-        fitnesses = list(map(toolbox.evaluate, invalid_ind))
-        for ind, fit in zip(invalid_ind, fitnesses):
-            ind.fitness.values = fit
+    def _mutate(self, p):
 
-        # The population is entirely replaced by the offspring
-        pop[:] = offspring
+        individ = randint(0, len(p[0]))
+        for i in range(len(p[0])):
+            p[individ][i] = 1 - p[individ][i]
+        return p
 
-    return pop
+    def _isconvergence(self, individ, percent):
 
-def run2(bagprops, items):
-    # Useful vars
-    MAX_WEIGHT = bagprops['maxweight']
-    MAX_CAPACITY = bagprops['maxcapacity']
-    POPULATIONS = 200
-    k = int(len(items) * 0.2)
-
-    toolbox = create_toolbox(bagprops, items)
-    # Important self-made function for evaluating a population quality
-    toolbox.register("evaluate", evaluate, items=items,
-                     max_weight=MAX_WEIGHT, max_capacity=MAX_CAPACITY)
-
-    # Custom chosen algorithms
-    toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mutate", tools.mutFlipBit, indpb=1)
-    toolbox.register("select", tools.selBest)
-
-    return get_custom_populations(toolbox, POPULATIONS)
-
-def get_custom_populations(toolbox, populations):
-    pop = toolbox.population(n=populations)
-
-    CXPB, MUTPB, NGEN = 0.5, 0.2, 200
-
-    # Evaluate the entire population
-    fitnesses = list(map(toolbox.evaluate, pop))
-    for ind, fit in zip(pop, fitnesses):
-        ind.fitness.values = fit
-
-    for g in range(NGEN):
-        # Select the next generation individuals
-        selected = toolbox.select(pop, int(len(pop)*0.2))
-        # Clone the selected individuals
-        offspring = list(map(toolbox.clone, selected))
-
-        # Apply crossover and mutation on the offspring
-        for child1, child2 in zip(offspring[::2], offspring[1::2]):
-                toolbox.mate(child1, child2)
-                del child1.fitness.values
-                del child2.fitness.values
-
-        for mutant in offspring:
-                toolbox.mutate(mutant)
-                del mutant.fitness.values
-
-        # Evaluate the individuals with an invalid fitness
-        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-        fitnesses = list(map(toolbox.evaluate, invalid_ind))
-        for ind, fit in zip(invalid_ind, fitnesses):
-            ind.fitness.values = fit
-
-        # Removing parents (selected)
-        for indie in selected:
-            pop.remove(indie)
-        # Replacing them with children
-        pop.extend(offspring)
-        g += 1
-
-    return pop
+        fitness = self.fitness(individ)
+        return percent and self.best_fitness and fitness and 1 - fitness / self.best_fitness < percent
